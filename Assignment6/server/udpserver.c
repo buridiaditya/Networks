@@ -107,10 +107,11 @@ int main(int argc, char **argv) {
      * otherwise we have to wait about 20 secs. 
      * Eliminates "ERROR on binding: Address already in use" error. 
      */
-    timeout.tv_sec = TIMEOUT;
-    timeout.tv_usec = 0;
-    setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO|SO_REUSEADDR, 
-            (const char *)&timeout , sizeof(timeout));
+    //timeout.tv_sec = TIMEOUT;
+    //timeout.tv_usec = 0;
+    optval = 1;
+    setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, 
+            (const void*)&optval,sizeof(int) );
 
     /*
      * build the server's Internet address
@@ -168,7 +169,9 @@ int main(int argc, char **argv) {
         i = 0;
         expected_seq = 1;
         while(expected_seq <= no_of_packets){
-            recv(sockfd,buf,BUFSIZE,0,(struct sockaddr*)&clientaddr,(socklen_t*)&clientlen); 
+            n = recvfrom(sockfd,buf,BUFSIZE,0,(struct sockaddr*)&clientaddr,(socklen_t*)&clientlen); 
+            if(n < 0)
+                error("Error receiving packet");
             seq = strtoint(buf,0);
             bzero(ack,ACKSIZE);
             printf("Packet %d received\n",seq);
@@ -178,15 +181,15 @@ int main(int argc, char **argv) {
                 fwrite(buf+8,BUFSIZE-8,1,fd);
                 
                 createACK(ack,buf);
-                sendto(sockfd,ack,ACKSIZE,0,(struct sockaddr*)&clientaddr,clientlen);
+                sendto(sockfd,ack,ACKSIZE,0,(struct sockaddr*)&clientaddr,sizeof(clientaddr));
             }
             else if(expected_seq < seq){
                 inttostr(ack,0,expected_seq-1);
-                sendto(sockfd,ack,ACKSIZE,0,(struct sockaddr*)&clientaddr,clientlen);
+                sendto(sockfd,ack,ACKSIZE,0,(struct sockaddr*)&clientaddr,sizeof(clientaddr));
             }
             else{
                 inttostr(ack,0,seq);
-                sendto(sockfd,ack,ACKSIZE,0,(struct sockaddr*)&clientaddr,clientlen);
+                sendto(sockfd,ack,ACKSIZE,0,(struct sockaddr*)&clientaddr,sizeof(clientaddr));
             }
             bzero(buf,BUFSIZE);
         }

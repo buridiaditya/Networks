@@ -48,8 +48,10 @@ void sendReliableUDP(int sockfd, char* buf,struct sockaddr_in serveraddr){
         //    error("ERROR receiving from socket");
         //}
         //else{
-            if(checkACK(buf,recvbuf) == 0)
+            if(checkACK(buf,recvbuf) == 0){
+                printf("Received ACK for packet %d\n",strtoint(recvbuf,0));
                 break;
+            }
             else
 
                 printf("Packet Retransmission\n");
@@ -78,7 +80,7 @@ void recvReliableUDP(int sockfd, char* buf, struct sockaddr_in* serveraddr){
 
 void setSequenceNumber(char* buf,int* index){
     inttostr(buf,0,*index);
-    *index = *index+1;
+    //*index = *index+1;
 }
 
 void setMessageSize(char* buf,int size){

@@ -15,8 +15,9 @@
 #include <math.h>
 #include <signal.h>
 #include <sys/wait.h>
+#include <fcntl.h>
 
-#define SLEEP_VAL 5
+#define SLEEP_VAL 1
 #define BUFSIZE 1024
 #define ACKSIZE 64
 #define TIMEOUT 1
@@ -36,7 +37,7 @@ void mysig(int sig){
     pid_t pid;
     printf("PARENT : Received signal %d \n", sig);
     if (sig == SIGALRM){
-        alarm_fired = 1;
+        alarm_status = 1;
     }
 }
 int main(int argc, char **argv) {
@@ -91,7 +92,7 @@ int main(int argc, char **argv) {
     //timeout.tv_sec = TIMEOUT;
     //timeout.tv_usec = 0;
     //setsockopt(sockfd,SOL_SOCKET,SO_RCVTIMEO,(const char*) &timeout,sizeof(timeout));
-    int status = fcntl(sockfd, F_SETFL, fcntl(socketfd, F_GETFL, 0) | O_NONBLOCK);  
+    //int status = fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFL, 0) | O_NONBLOCK);  
     
     /* build the server's Internet address */
     bzero((char *) &serveraddr, sizeof(serveraddr));
@@ -105,8 +106,8 @@ int main(int argc, char **argv) {
      */
     buf = (char**) malloc(sizeof(char*)*WINDOW_SIZE);
     for(i = 0; i < WINDOW_SIZE; i++)
-        buf[i] = (char*) malloc(sizeof(char)*BUF_SIZE);
-    
+        buf[i] = (char*) malloc(sizeof(char)*BUFSIZE);
+
     /*
      * Send file name and size of file
      */
@@ -129,11 +130,12 @@ int main(int argc, char **argv) {
     sprintf(no_of_chunks_str,"%d",no_of_chunks);
     strcat(buf[0]+8, no_of_chunks_str);
     setSequenceNumber(buf[0],&seq);
-    setMessageSize(buf[0],strlen(buf));
+    setMessageSize(buf[0],strlen(buf[0]));
     sendReliableUDP(sockfd,buf[0],serveraddr); 
     
     file = fopen(filename,"r");
     
+    int status = fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFL, 0) | O_NONBLOCK);  
     MD5_Init(&mdContext);
     bzero(buf[0],BUFSIZE); 
     i = 0;
@@ -150,11 +152,11 @@ int main(int argc, char **argv) {
             fread(buf[next_seq_no%WINDOW_SIZE]+8,BUFSIZE-8,1,file);
 
             /* Create Packet */
-            setSequenceNumber(buf[next_seq_no%WINDOW_SIZE],&seq);
-            setMessageSize(buf[next_seq_no%WINDOW_SIZE],strlen(buf[next_seq_no%WINDOW_SIZE]));
+            setSequenceNumber(buf[next_seq_no%WINDOW_SIZE],&next_seq_no);
+            setMessageSize(buf[next_seq_no%WINDOW_SIZE],strlen(buf[next_seq_no%WINDOW_SIZE]+8));
             
             /* Send data */
-            n = sendto(sockfd,buf[next_seq_no%WINDOW_SIZE],BUFSIZE,0,(struct sockaddr*)&serveraddr,serverlen);
+            n = sendto(sockfd,buf[next_seq_no%WINDOW_SIZE],BUFSIZE,0,(struct sockaddr*)&serveraddr,sizeof(serveraddr));
             if(n < 0)
                 error("Error writing to socket");
 
@@ -175,38 +177,37 @@ int main(int argc, char **argv) {
                 if( n > 0 ){
                     ack_no = strtoint(ack,0);
                     printf("ACK of Packet %d received\n",ack_no);
-                    if(ack_no > base){ 
+                    if(ack_no >= base){ 
                         base = ack_no+1;
                         alarm(SLEEP_VAL);
                     }
                 }
             }while(alarm_status == 0);
+            alarm_status = 0;
 
             /* Retransmission if required */
             if(base != next_seq_no)
                 alarm(SLEEP_VAL);
             for(i = base; i < next_seq_no; i++){
-                n = sendto(sockfd,buf[next_seq_no%WINDOW_SIZE],BUFSIZE,0,(struct sockaddr*)&serveraddr,serverlen);
+                n = sendto(sockfd,buf[i%WINDOW_SIZE],BUFSIZE,0,(struct sockaddr*)&serveraddr,sizeof(serveraddr));
                 if(n < 0)
                     error("Error writing to socket");
                 printf("Retransmitting Packet %d\n",i);
             }
         }
         //sendReliableUDP(sockfd,buf,serveraddr);
-        bzero(buf,BUFSIZE);
-        i++;
     }
-    printf("\nFile sent in %d chunks.\n",i);
+    printf("\nFile sent in %d chunks.\n",no_of_chunks);
      
     MD5_Final(checksum,&mdContext);
     checksum[MD5_DIGEST_LENGTH] = '\0';
 
 
     /* print the server's reply */
-    bzero(buf, BUFSIZE);
-    recvReliableUDP(sockfd,buf,&serveraddr);
-    printf("%s, %s\n",buf,checksum);
-    if(strcmp(buf,checksum) == 0)
+    bzero(buf[0], BUFSIZE);
+    recvReliableUDP(sockfd,buf[0],&serveraddr);
+    printf("%s, %s\n",buf[0],checksum);
+    if(strcmp(buf[0],checksum) == 0)
         printf("Check sum matched\n.");
     else
         printf("Check sum not matched\n.");
