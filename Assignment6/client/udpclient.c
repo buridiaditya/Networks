@@ -1,4 +1,4 @@
-/* 
+/*
  * tcpclient.c - A simple TCP client
  * usage: tcpclient <host> <port>
  */
@@ -9,7 +9,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <netdb.h> 
+#include <netdb.h>
 #include <openssl/md5.h>
 #include <sys/stat.h>
 #include <math.h>
@@ -21,8 +21,9 @@
 #define BUFSIZE 1024
 #define ACKSIZE 64
 #define TIMEOUT 1
-#define WINDOW_SIZE 3
-/* 
+#define MAXBUFFER 2000
+int WINDOW_SIZE = 3;
+/*
  * error - wrapper for perror
  */
 void error(char *msg) {
@@ -60,14 +61,14 @@ int main(int argc, char **argv) {
     int length_of_chunk;
     int no_of_chunks,i;
     struct timeval timeout;
-    int base = 1, next_seq_no = 1;
+    int base = 1, next_seq_no = 1,status,increment;
     /* check command line arguments */
     if (argc != 4) {
         fprintf(stderr,"usage: %s <hostname> <port> <filename>\n", argv[0]);
         exit(0);
     }
-    
-    
+
+
     hostname = argv[1];
     portno = atoi(argv[2]);
     filename = argv[3];
@@ -77,8 +78,8 @@ int main(int argc, char **argv) {
 
     /* socket: create the socket */
     sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    
-    if (sockfd < 0) 
+
+    if (sockfd < 0)
         error("ERROR opening socket");
 
     /* gethostbyname: get the server's DNS entry */
@@ -87,25 +88,25 @@ int main(int argc, char **argv) {
         fprintf(stderr,"ERROR, no such host as %s\n", hostname);
         exit(0);
     }
-    
+
     /* Set Socket Properties - Non Blocking Socket*/
     //timeout.tv_sec = TIMEOUT;
     //timeout.tv_usec = 0;
     //setsockopt(sockfd,SOL_SOCKET,SO_RCVTIMEO,(const char*) &timeout,sizeof(timeout));
-    //int status = fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFL, 0) | O_NONBLOCK);  
-    
+    //int status = fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFL, 0) | O_NONBLOCK);
+
     /* build the server's Internet address */
     bzero((char *) &serveraddr, sizeof(serveraddr));
     serveraddr.sin_family = AF_INET;
-    bcopy((char *)server->h_addr, 
+    bcopy((char *)server->h_addr,
             (char *)&serveraddr.sin_addr.s_addr, server->h_length);
     serveraddr.sin_port = htons(portno);
 
-    /* 
+    /*
      * Initalize Application layer buffer SIZE = WINDOW_SIZE * BUF_SIZE
      */
-    buf = (char**) malloc(sizeof(char*)*WINDOW_SIZE);
-    for(i = 0; i < WINDOW_SIZE; i++)
+    buf = (char**) malloc(sizeof(char*)*MAXBUFFER);
+    for(i = 0; i < MAXBUFFER; i++)
         buf[i] = (char*) malloc(sizeof(char)*BUFSIZE);
 
     /*
@@ -114,15 +115,15 @@ int main(int argc, char **argv) {
     length_of_chunk = 0;
     size_in_string = (char*) malloc(10);
     no_of_chunks_str = (char*) malloc(10);
-    
+
     stat(filename,&st); // SIZE OF FILE
-    no_of_chunks = ceil(st.st_size/(double)(BUFSIZE-8)); // NO OF CHUNKS INTO WHICH FILE IS DIVIDED 
-    
+    no_of_chunks = ceil(st.st_size/(double)(BUFSIZE-8)); // NO OF CHUNKS INTO WHICH FILE IS DIVIDED
+
     /*
-     * Create the HELLO Message containing filename, size of file, no of chunks 
+     * Create the HELLO Message containing filename, size of file, no of chunks
      */
     bzero(buf[0],BUFSIZE);
-    strcpy(buf[0]+8,filename); 
+    strcpy(buf[0]+8,filename);
     sprintf(size_in_string,"%d",(int)st.st_size);
     strcat(buf[0]+8,":");
     strcat(buf[0]+8, size_in_string);
@@ -131,76 +132,89 @@ int main(int argc, char **argv) {
     strcat(buf[0]+8, no_of_chunks_str);
     setSequenceNumber(buf[0],&seq);
     setMessageSize(buf[0],strlen(buf[0]));
-    sendReliableUDP(sockfd,buf[0],serveraddr); 
-    
+    sendReliableUDP(sockfd,buf[0],serveraddr);
+
     file = fopen(filename,"r");
-    
-    int status = fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFL, 0) | O_NONBLOCK);  
+
+    //int status = fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFL, 0) | O_NONBLOCK);
     MD5_Init(&mdContext);
-    bzero(buf[0],BUFSIZE); 
+    bzero(buf[0],BUFSIZE);
     i = 0;
     ack_no = 0;
     printf("File will be sent in %d packets.\n",no_of_chunks);
-    while(feof(file) == 0){
-        if(next_seq_no - base < WINDOW_SIZE){
-            
+    while(feof(file) == 0 || base != next_seq_no){
+        if(next_seq_no - base < WINDOW_SIZE && next_seq_no <= no_of_chunks){
+
             /* Start Timer */
             if(base == next_seq_no)
                 alarm(SLEEP_VAL);
-            
+
             /* Read Packet */
-            fread(buf[next_seq_no%WINDOW_SIZE]+8,BUFSIZE-8,1,file);
+            fread(buf[next_seq_no%MAXBUFFER]+8,BUFSIZE-8,1,file);
 
             /* Create Packet */
-            setSequenceNumber(buf[next_seq_no%WINDOW_SIZE],&next_seq_no);
-            setMessageSize(buf[next_seq_no%WINDOW_SIZE],strlen(buf[next_seq_no%WINDOW_SIZE]+8));
-            
+            setSequenceNumber(buf[next_seq_no%MAXBUFFER],&next_seq_no);
+            setMessageSize(buf[next_seq_no%MAXBUFFER],strlen(buf[next_seq_no%MAXBUFFER]+8));
+
             /* Send data */
-            n = sendto(sockfd,buf[next_seq_no%WINDOW_SIZE],BUFSIZE,0,(struct sockaddr*)&serveraddr,sizeof(serveraddr));
+            n = sendto(sockfd,buf[next_seq_no%MAXBUFFER],BUFSIZE,0,(struct sockaddr*)&serveraddr,sizeof(serveraddr));
             if(n < 0)
                 error("Error writing to socket");
 
             printf("Transmitting Packet %d\n",next_seq_no);
 
             /* Update Hash */
-            MD5_Update(&mdContext,buf[next_seq_no%WINDOW_SIZE]+8,BUFSIZE-8);
-            
+            MD5_Update(&mdContext,buf[next_seq_no%MAXBUFFER]+8,BUFSIZE-8);
+
             /* Increment next_seq_no */
             next_seq_no++;
-            
-            bzero(buf[next_seq_no%WINDOW_SIZE],BUFSIZE);
+
+            bzero(buf[next_seq_no%MAXBUFFER],BUFSIZE);
         }
         else{
+            increment = 0;
             do{
                 bzero(ack,ACKSIZE);
-                n = recvfrom(sockfd,ack,ACKSIZE,0,(struct sockaddr*)&serveraddr,(socklen_t*)&serverlen);
+                n = recvfrom(sockfd,ack,ACKSIZE,MSG_DONTWAIT,(struct sockaddr*)&serveraddr,(socklen_t*)&serverlen);
                 if( n > 0 ){
                     ack_no = strtoint(ack,0);
                     printf("ACK of Packet %d received\n",ack_no);
-                    if(ack_no >= base){ 
+                    if(ack_no >= base && ack_no < next_seq_no){
+                        increment += ack_no - base + 1;
                         base = ack_no+1;
                         alarm(SLEEP_VAL);
+                        if(ack_no == no_of_chunks)
+                          break;
                     }
                 }
-            }while(alarm_status == 0);
+            }while(alarm_status == 0 && ack_no != no_of_chunks);
             alarm_status = 0;
 
             /* Retransmission if required */
-            if(base != next_seq_no)
+            if(base != next_seq_no){
                 alarm(SLEEP_VAL);
-            for(i = base; i < next_seq_no; i++){
-                n = sendto(sockfd,buf[i%WINDOW_SIZE],BUFSIZE,0,(struct sockaddr*)&serveraddr,sizeof(serveraddr));
+            }
+            for(i = base; i < next_seq_no && i < base + WINDOW_SIZE/2; i++){
+                n = sendto(sockfd,buf[i%MAXBUFFER],BUFSIZE,0,(struct sockaddr*)&serveraddr,sizeof(serveraddr));
                 if(n < 0)
                     error("Error writing to socket");
                 printf("Retransmitting Packet %d\n",i);
             }
+            // Increment or decrement WINDOW SIZE
+            if(base != next_seq_no){
+                WINDOW_SIZE /= 2;
+            }else if(WINDOW_SIZE *2 < MAXBUFFER){
+                WINDOW_SIZE *= 2;
+            }
+
         }
         //sendReliableUDP(sockfd,buf,serveraddr);
     }
     printf("\nFile sent in %d chunks.\n",no_of_chunks);
-     
+
     MD5_Final(checksum,&mdContext);
     checksum[MD5_DIGEST_LENGTH] = '\0';
+    //status = fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFL, 0) | ~O_NONBLOCK);
 
 
     /* print the server's reply */
