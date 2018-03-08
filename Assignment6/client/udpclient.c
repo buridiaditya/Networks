@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
     int length_of_chunk;
     int no_of_chunks,i;
     struct timeval timeout;
-    int base = 1, next_seq_no = 1,status,increment;
+    int base = 1, next_seq_no = 1,status,increment,CW=1;
     /* check command line arguments */
     if (argc != 4) {
         fprintf(stderr,"usage: %s <hostname> <port> <filename>\n", argv[0]);
@@ -168,23 +168,25 @@ int main(int argc, char **argv) {
 
             /* Increment next_seq_no */
             next_seq_no++;
-
+            CW = next_seq_no;
             bzero(buf[next_seq_no%MAXBUFFER],BUFSIZE);
         }
         else{
             increment = 0;
+            if(ack_no == no_of_chunks)
+                break;
             do{
+                if(ack_no == no_of_chunks)
+                    break;
                 bzero(ack,ACKSIZE);
                 n = recvfrom(sockfd,ack,ACKSIZE,MSG_DONTWAIT,(struct sockaddr*)&serveraddr,(socklen_t*)&serverlen);
                 if( n > 0 ){
                     ack_no = strtoint(ack,0);
                     printf("ACK of Packet %d received\n",ack_no);
-                    if(ack_no >= base && ack_no < next_seq_no){
+                    if(ack_no >= base && ack_no < CW){
                         increment += ack_no - base + 1;
                         base = ack_no+1;
                         alarm(SLEEP_VAL);
-                        if(ack_no == no_of_chunks)
-                          break;
                     }
                 }
             }while(alarm_status == 0 && ack_no != no_of_chunks);
@@ -193,20 +195,29 @@ int main(int argc, char **argv) {
             /* Retransmission if required */
             if(base != next_seq_no){
                 alarm(SLEEP_VAL);
+                int temp = CW;
+                if(base != CW && base + WINDOW_SIZE/2 > next_seq_no)
+                    temp = next_seq_no;
+                else if(base == CW && base + WINDOW_SIZE*2 > next_seq_no){
+                    temp = next_seq_no;
+                }
+                for(i = base; i < temp; i++){
+                    n = sendto(sockfd,buf[i%MAXBUFFER],BUFSIZE,0,(struct sockaddr*)&serveraddr,sizeof(serveraddr));
+                    if(n < 0)
+                        error("Error writing to socket");
+                    printf("Retransmitting Packet %d\n",i);
+                }
+                if(base != CW)
+                  WINDOW_SIZE /= 2;
+                else{
+                  if(WINDOW_SIZE *2 < MAXBUFFER)
+                      WINDOW_SIZE *= 2;
+                }
+                CW = base + WINDOW_SIZE;
             }
-            for(i = base; i < next_seq_no && i < base + WINDOW_SIZE/2; i++){
-                n = sendto(sockfd,buf[i%MAXBUFFER],BUFSIZE,0,(struct sockaddr*)&serveraddr,sizeof(serveraddr));
-                if(n < 0)
-                    error("Error writing to socket");
-                printf("Retransmitting Packet %d\n",i);
-            }
-            // Increment or decrement WINDOW SIZE
-            if(base != next_seq_no){
-                WINDOW_SIZE /= 2;
-            }else if(WINDOW_SIZE *2 < MAXBUFFER){
+            else if(WINDOW_SIZE *2 < MAXBUFFER){
                 WINDOW_SIZE *= 2;
             }
-
         }
         //sendReliableUDP(sockfd,buf,serveraddr);
     }

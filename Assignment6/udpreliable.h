@@ -40,16 +40,16 @@ void sendReliableUDP(int sockfd, char* buf,struct sockaddr_in serveraddr){
     while(1){
         //printf("Sending %s\n",buf+8);
         n = sendto(sockfd, buf, BUFSIZE,0,(struct sockaddr *)&serveraddr,sizeof(serveraddr));
-        if (n < 0) 
+        if (n < 0)
             error("ERROR writing to socket");
         bzero(recvbuf,ACKSIZE);
         n = recvfrom(sockfd, recvbuf, ACKSIZE,0,(struct sockaddr *)&serveraddr,(socklen_t*)sizeof(serveraddr));
-        //if (n < 0){ 
+        //if (n < 0){
         //    error("ERROR receiving from socket");
         //}
         //else{
             if(checkACK(buf,recvbuf) == 0){
-                printf("Received ACK for packet %d\n",strtoint(recvbuf,0));
+                //printf("Received ACK for packet %d\n",strtoint(recvbuf,0));
                 break;
             }
             else
@@ -76,7 +76,7 @@ void recvReliableUDP(int sockfd, char* buf, struct sockaddr_in* serveraddr){
     if(n<0)
         error("ERROR writing in server");
 }
-    
+
 
 void setSequenceNumber(char* buf,int* index){
     inttostr(buf,0,*index);
