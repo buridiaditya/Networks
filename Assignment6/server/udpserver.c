@@ -1,5 +1,5 @@
-	/* 
- * tcpserver.c - A simple TCP echo server 
+	/*
+ * tcpserver.c - A simple TCP echo server
  * usage: tcpserver <port>
  */
 
@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <netdb.h>
-#include <sys/types.h> 
+#include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -19,13 +19,13 @@
 #define ACKSIZE 64
 #define TIMEOUT 1
 #if 0
-/* 
+/*
  * Structs exported from in.h
  */
 
 /* Internet address */
 struct in_addr {
-    unsigned int s_addr; 
+    unsigned int s_addr;
 };
 
 /* Internet style socket address */
@@ -85,32 +85,33 @@ int main(int argc, char **argv) {
     FILE* fd;
     int* seqbuffer;
     struct timeval timeout;
+    double dropP;
     //vector<int> seqRecv;
-    /* 
-     * check command line arguments 
+    /*
+     * check command line arguments
      */
-    if (argc != 2) {
-        fprintf(stderr, "usage: %s <port>\n", argv[0]);
+    if (argc != 3) {
+        fprintf(stderr, "usage: %s <port> <drop probability>\n", argv[0]);
         exit(1);
     }
     portno = atoi(argv[1]);
-
-    /* 
-     * socket: create the parent socket 
+    dropP = atof(argv[2]);
+    /*
+     * socket: create the parent socket
      */
     sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sockfd < 0) 
+    if (sockfd < 0)
         error("ERROR opening socket");
 
-    /* setsockopt: Handy debugging trick that lets 
-     * us rerun the server immediately after we kill it; 
-     * otherwise we have to wait about 20 secs. 
-     * Eliminates "ERROR on binding: Address already in use" error. 
+    /* setsockopt: Handy debugging trick that lets
+     * us rerun the server immediately after we kill it;
+     * otherwise we have to wait about 20 secs.
+     * Eliminates "ERROR on binding: Address already in use" error.
      */
     //timeout.tv_sec = TIMEOUT;
     //timeout.tv_usec = 0;
     optval = 1;
-    setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, 
+    setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR,
             (const void*)&optval,sizeof(int) );
 
     /*
@@ -127,22 +128,22 @@ int main(int argc, char **argv) {
     /* this is the port we will listen on */
     serveraddr.sin_port = htons((unsigned short)portno);
 
-    /* 
-     * bind: associate the parent socket with a port 
+    /*
+     * bind: associate the parent socket with a port
      */
-    if (bind(sockfd, (struct sockaddr *) &serveraddr, 
-                sizeof(serveraddr)) < 0) 
+    if (bind(sockfd, (struct sockaddr *) &serveraddr,
+                sizeof(serveraddr)) < 0)
         error("ERROR on binding");
 
     printf("Server Running ....\n");
     while (1) {
-        /* 
+        /*
          * read: read input string from the client
          */
         bzero(buf, BUFSIZE);
         recvReliableUDP(sockfd,buf,&clientaddr);
         //printf("server received %d bytes: %s", n, buf);
-        
+
         /*
          * Parse input for file name and size of file
          */
@@ -157,10 +158,10 @@ int main(int argc, char **argv) {
         seqbuffer = (int*) malloc(sizeof(int)*(no_of_packets+2));
         for(i = 0; i < no_of_packets+2;i++)
             seqbuffer[i] = 0;
-        
+
         seqbuffer[seq] = 1;
         */
-        fd = fopen(filename,"w+");        
+        fd = fopen(filename,"w+");
         /*
          *  Receive file from client
          */
@@ -169,17 +170,22 @@ int main(int argc, char **argv) {
         i = 0;
         expected_seq = 1;
         while(expected_seq <= no_of_packets){
-            n = recvfrom(sockfd,buf,BUFSIZE,0,(struct sockaddr*)&clientaddr,(socklen_t*)&clientlen); 
+            bzero(buf,BUFSIZE);
+            n = recvfrom(sockfd,buf,BUFSIZE,0,(struct sockaddr*)&clientaddr,(socklen_t*)&clientlen);
             if(n < 0)
                 error("Error receiving packet");
             seq = strtoint(buf,0);
             bzero(ack,ACKSIZE);
             printf("Packet %d received\n",seq);
+            if((double)rand() / (double)RAND_MAX < dropP){
+                printf("Dropped Packet %d\n",seq);
+                continue;
+            }
             if(expected_seq == seq){
                 expected_seq++;
                 MD5_Update(&mdContext,buf+8,BUFSIZE-8);
                 fwrite(buf+8,BUFSIZE-8,1,fd);
-                
+
                 createACK(ack,buf);
                 sendto(sockfd,ack,ACKSIZE,0,(struct sockaddr*)&clientaddr,sizeof(clientaddr));
             }
@@ -191,23 +197,22 @@ int main(int argc, char **argv) {
                 inttostr(ack,0,seq);
                 sendto(sockfd,ack,ACKSIZE,0,(struct sockaddr*)&clientaddr,sizeof(clientaddr));
             }
-            bzero(buf,BUFSIZE);
         }
         printf("Received file in %d chunks.\n",no_of_packets );
-        
+
         fclose(fd);
         /*
-         *  Compute MD5checksum 
+         *  Compute MD5checksum
          */
         MD5_Final(checksum,&mdContext);
         checksum[MD5_DIGEST_LENGTH] = '\0';
         printf("%s\n",checksum);
-        /* 
-         * write: echo the input string back to the client 
+        /*
+         * write: echo the input string back to the client
          */
         strcpy(buf,checksum);
         sendReliableUDP(sockfd,buf, clientaddr);
-        
+
     }
     close(sockfd);
 }

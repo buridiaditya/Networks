@@ -207,9 +207,9 @@ int main(int argc, char **argv) {
                         error("Error writing to socket");
                     printf("Retransmitting Packet %d\n",i);
                 }
-                if(base != CW)
+                if(base != CW && WINDOW_SIZE != 1){
                   WINDOW_SIZE /= 2;
-                else{
+                }else{
                   if(WINDOW_SIZE *2 < MAXBUFFER)
                       WINDOW_SIZE *= 2;
                 }
