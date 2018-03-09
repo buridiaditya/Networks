@@ -107,8 +107,7 @@ int main(int argc, char **argv) {
      */
     timeout.tv_sec = TIMEOUT;
     timeout.tv_usec = 0;
-    setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO|SO_REUSEADDR, 
-            (const char *)&timeout , sizeof(timeout));
+    //setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO|SO_REUSEADDR, (const char *)&timeout , sizeof(timeout));
 
     /*
      * build the server's Internet address

@@ -5,10 +5,10 @@ tcp: tcpserver tcpclient
 udp: udpserver udpclient
 
 tcpserver: 
-	@gcc server/tcpserver.c -o server/tcpserver -lssl -lcrypto -lm
+	@icc server/tcpserver.c -I/usr/local/opt/openssl/include -L/usr/local/opt/openssl/lib -o server/tcpserver -lssl -lcrypto -lm
 tcpclient:
-	@gcc client/tcpclient.c -o client/tcpclient -lssl -lcrypto
+	@icc client/tcpclient.c -I/usr/local/opt/openssl/include -L/usr/local/opt/openssl/lib -o client/tcpclient -lssl -lcrypto
 udpserver:
-	@gcc server/udpserver.c -o server/udpserver -lssl -lcrypto -lm
+	@icc server/udpserver.c -I/usr/local/opt/openssl/include -L/usr/local/opt/openssl/lib -o server/udpserver -lssl -lcrypto -lm
 udpclient:
-	@gcc client/udpclient.c -o client/udpclient -lssl -lcrypto -lm
+	@icc client/udpclient.c -I/usr/local/opt/openssl/include -L/usr/local/opt/openssl/lib -o client/udpclient -lssl -lcrypto -lm
