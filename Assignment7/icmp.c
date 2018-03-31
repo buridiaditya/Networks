@@ -81,6 +81,8 @@ int main(int argn,char** argv){
     if (n < 0)
         perror("Unable to set socket options");
 
+    // ########### INITIALIZING IP HEADER ##############
+    // REFER TO RFC 791
     ip_header->version = 4;
     ip_header->ihl = 5;
     ip_header->tos = 0;
@@ -96,6 +98,9 @@ int main(int argn,char** argv){
     mode_ = 1;
 
   }
+
+  // ########### INITIALIZING ICMP HEADER ##############
+  // REFER TO RFC 792
 
   icmp_header->type = 8;
   icmp_header->code = 0;
@@ -118,6 +123,7 @@ int main(int argn,char** argv){
 
     n = recvfrom(sockfd,recvBuffer,BUFSIZE,0,(struct sockaddr*)&addr,&addr_len);
     if(n < 0){
+        MAX_PACKETS++;
         lost++;
         continue;
     }
@@ -151,6 +157,7 @@ void signal_handler(int signo){
 
 
 unsigned short cksum(char* icmp_header, int len){
+  // #REFER TO RFC 1071
   long sum = 0;  /* assume 32 bit long, 16 bit short */
 
   while(len > 1){
