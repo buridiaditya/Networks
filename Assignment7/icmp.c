@@ -12,11 +12,11 @@
 #include <strings.h>
 #include <error.h>
 #include <unistd.h>
+#include <math.h>
 
 #define BUFSIZE 44
 
-
-double mean = 0, min=100000, max=0, meand = 0,difference;
+double mean = 0, min=100000, max=0, meand = 0,difference,diffsq=0;
 int MAX_PACKETS = 0;
 int lost = 0;
 struct timeval currentTime;
@@ -32,17 +32,16 @@ int main(int argn,char** argv){
   socklen_t addr_len;
   struct iphdr* ip_header;
   struct icmphdr* icmp_header;
-  char buffer[BUFSIZE];
-  char recvBuffer[BUFSIZE];
+  char buffer[BUFSIZE], recvBuffer[BUFSIZE];
   struct timeval* start;
   struct timeval* end;
   char* mode;
-  int mode_ = 0;
+  int mode_ = 0, val = 1;
   struct hostent *server;
-  int val = 1;
-  int TTL = 43;
+  int TTL = 252; // TIME TO LIVE
   struct timeval tv;
-  tv.tv_sec = 5;
+
+  tv.tv_sec = 5; // TIMEOUT
   tv.tv_usec = 0;
 
   hostname = argv[1];
@@ -129,6 +128,7 @@ int main(int argn,char** argv){
     difference = (currentTime.tv_usec-end->tv_usec)*0.001 + (currentTime.tv_sec-end->tv_sec)*1000;
     printf("%d bytes from %s (%s): icmp_seq=%d ttl=%d time=%.3f ms\n", n,hostname,inet_ntoa(addr.sin_addr),MAX_PACKETS+1,TTL,difference);
     mean = (mean*MAX_PACKETS+difference)/(MAX_PACKETS+1);
+    diffsq += difference*difference;
     if(difference > max)
       max = difference;
     if(difference < min)
@@ -136,8 +136,6 @@ int main(int argn,char** argv){
     MAX_PACKETS++;
     sleep(1);
   }
-
-  //printf("%X\n%X\n",buffer,recvBuffer);
 
   return 0;
 }
@@ -147,6 +145,7 @@ void signal_handler(int signo){
   gettimeofday(&currentTime,NULL);
   printf("\n--- %s ping statistics ---\n",hostname);
   difference = (currentTime.tv_usec-begin.tv_usec)*0.001 + (currentTime.tv_sec-begin.tv_sec)*1000;
+  meand = sqrt(diffsq/MAX_PACKETS + mean*mean);
   printf("%d packets transmitted, %d received, %.2f%% packet loss, time %.3fms\n",MAX_PACKETS,MAX_PACKETS-lost,((double)lost*100)/MAX_PACKETS,difference );
   printf("rtt min/avg/max/mdev = %.3f/%.3f/%.3f/%.3f ms\n",min,mean,max,meand);
   exit(0);
