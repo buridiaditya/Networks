@@ -115,10 +115,8 @@ int main(int argn,char** argv){
     if(n < 0)
         perror("Error writing to socket");
 
-    if(mode_)
-      n = recvfrom(sockfd,recvBuffer,BUFSIZE,0,(struct sockaddr*)&addr,&addr_len);
-    else
-      n = recvfrom(sockfd,recvBuffer+sizeof(struct iphdr),BUFSIZE,0,(struct sockaddr*)&addr,&addr_len);
+
+    n = recvfrom(sockfd,recvBuffer,BUFSIZE,0,(struct sockaddr*)&addr,&addr_len);
     if(n < 0){
         lost++;
         continue;
